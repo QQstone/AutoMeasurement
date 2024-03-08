@@ -1,0 +1,5 @@
+matplotlib==3.5.1
+numpy==1.19.3
+opencv_python==4.5.4.60
+PyQt5==5.15.10
+scikit_learn==1.1.2
