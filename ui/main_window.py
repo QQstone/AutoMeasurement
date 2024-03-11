@@ -16,7 +16,6 @@ from PyQt5.QtGui import QImage, QPixmap
 from PyQt5.QtWidgets import QGraphicsScene, QFileDialog, QDialog, QMessageBox
 import configparser
 
-from measure import Measure
 from ui.mode_editor import Ui_ModeEditor
 from ui.step import Step
 
@@ -69,10 +68,6 @@ class Ui_MainWindow(object):
         self.groupMeasure.setObjectName("groupMeasure")
         self.verticalLayout.addWidget(self.groupMeasure)
 
-        self.plainTextEdit = QtWidgets.QPlainTextEdit()
-        # self.plainTextEdit.setGeometry(QtCore.QRect(10, 30, 221, 371))
-        self.plainTextEdit.setObjectName("plainTextEdit")
-        self.verticalLayout.addWidget(self.plainTextEdit)
 
         self.formLayout = QtWidgets.QFormLayout(self.processWidget)
         self.formLayout.setContentsMargins(0, 0, 0, 0)
@@ -118,19 +113,6 @@ class Ui_MainWindow(object):
         self.btn_loadfile.clicked.connect(self.load_config_file)
         self.btn_loadfile.setEnabled(False)
 
-        self.btn_measurement = QtWidgets.QToolButton(self.processWidget)
-        self.btn_measurement.setEnabled(True)
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
-        sizePolicy.setHorizontalStretch(0)
-        sizePolicy.setVerticalStretch(0)
-        sizePolicy.setHeightForWidth(self.btn_measurement.sizePolicy().hasHeightForWidth())
-        self.btn_measurement.setSizePolicy(sizePolicy)
-        self.btn_measurement.setMinimumSize(QtCore.QSize(69, 0))
-        self.btn_measurement.setObjectName("btn_measurement")
-        self.formLayout.setWidget(4, QtWidgets.QFormLayout.SpanningRole, self.btn_measurement)
-        self.btn_measurement.clicked.connect(self.measurement)
-        self.btn_measurement.setEnabled(False)
-
         right_container = QtWidgets.QWidget()
         right_container.setLayout(self.verticalLayout)
         self.horizontalLayout.addWidget(right_container)
@@ -149,20 +131,17 @@ class Ui_MainWindow(object):
 
     def retranslateUi(self, MainWindow):
         _translate = QtCore.QCoreApplication.translate
-        MainWindow.setWindowTitle(_translate("MainWindow", "鹿茸菇生长自动测量"))
+        MainWindow.setWindowTitle(_translate("MainWindow", "鹿茸菇图像预处理配置软件"))
         self.groupMeasure.setTitle(_translate("MainWindow", "测量结果"))
         self.btn_import.setText(_translate("MainWindow", "导入图像"))
         self.btn_reset.setText(_translate("MainWindow", "重置图像"))
-        # self.btn_background.setText(_translate("MainWindow", "背景环境"))
-        # self.btn_grabcut.setText(_translate("MainWindow", "提取前景"))
         self.btn_usemode.setText(_translate("MainWindow", "应用模式"))
         self.btn_editmode.setText(_translate("MainWindow", "编辑模式"))
         self.btn_createFile.setText(_translate("MainWindow", "新建配置"))
         self.btn_loadfile.setText(_translate("MainWindow", "加载配置"))
-        self.btn_measurement.setText(_translate("MainWindow", "测量"))
 
     def importImg(self):
-        fname = QFileDialog.getOpenFileName(self, 'import Image', './', 'Image files (*.jpg *.gif *.png *.jpeg)')
+        fname = QFileDialog.getOpenFileName(self, '导入图像', './', 'Image files (*.jpg *.gif *.png *.jpeg)')
 
         if fname[0]:
             self.src_img = self.imread(fname[0])
@@ -172,7 +151,6 @@ class Ui_MainWindow(object):
             self.btn_createFile.setEnabled(True)
             self.btn_loadfile.setEnabled(True)
             self.btn_usemode.setEnabled(True)
-            self.btn_measurement.setEnabled(True)
 
     def reset_img(self):
         self.src_img = None
@@ -181,7 +159,6 @@ class Ui_MainWindow(object):
         self.btn_import.setEnabled(True)
         self.btn_createFile.setEnabled(False)
         self.btn_usemode.setEnabled(False)
-        self.btn_measurement.setEnabled(False)
         self.btn_loadfile.setEnabled(False)
 
     def usemode(self):
@@ -203,7 +180,7 @@ class Ui_MainWindow(object):
 
     def create_new_config_file(self):
         # 选择目录
-        filePath, filetype = QFileDialog.getSaveFileName(self, "Save New Config", QDir.homePath(), "Config Files (*.ini)")
+        filePath, filetype = QFileDialog.getSaveFileName(self, "保存配置文件", QDir.homePath(), "Config Files (*.ini)")
         if filePath:
             # 在目录中创建空白文件
             with open(filePath, 'w') as f:
@@ -219,45 +196,6 @@ class Ui_MainWindow(object):
             self.txt_filePath.setText(os.path.basename(filePath))
             self.configPath = filePath
             self.loadDetectFlow()
-
-    def measurement(self):
-        result = ''
-        # 找到目标 排除形心最下者为标尺
-        #targets = cv2.findContours(self.cur_img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        img = self.cur_img.copy()
-        measure = Measure(img)
-        measure.find_targets()
-        # 比例尺
-        scale = 140.0 / measure.scale
-        # 子实体轮廓
-        fruit_bodies = measure.fruit_bodies
-        measure.build_roi(self.src_img.copy())
-        sperated_area = measure.sperated_area
-
-        for i in range(len(fruit_bodies)):
-            contour, cX, cY = fruit_bodies[i]
-            cv2.putText(self.src_img, str(i + 1), (cX, cY), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 1)
-            cap_area, stipe_area = sperated_area[i]
-            cv2.drawContours(self.src_img, [cap_area], -1, (0, 255, 0), 2)  # 第一部分用绿色绘制
-            cv2.drawContours(self.src_img, [stipe_area], -1, (0, 0, 255), 2)  # 第二部分用红色绘制
-
-            cap_thick = np.sqrt((cap_area[0][0] - cap_area[1][0]) ** 2 +
-                            (cap_area[0][1] - cap_area[1][1]) ** 2)
-            cap_diameter = np.sqrt((cap_area[1][0] - cap_area[2][0]) ** 2 +
-                             (cap_area[1][1] - cap_area[2][1]) ** 2)
-
-            stipe_height = np.sqrt((stipe_area[1][0] - stipe_area[2][0]) ** 2 +
-                             (stipe_area[1][1] - stipe_area[2][1]) ** 2)
-
-            result += '第%d个：菌盖直径：%.2f mm，菌盖厚度：%.2f mm，菌柄高度：%.2f mm\n' % (
-                i + 1,
-                cap_diameter * scale,
-                cap_thick * scale,
-                stipe_height * scale
-            )
-        self.graphicsShow(self.src_img)
-        self.plainTextEdit.setPlainText(result)
-        return 0
 
     def imread(self, imgPath):
         img = cv2.imread(imgPath)
