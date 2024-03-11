@@ -11,6 +11,7 @@ class Measure:
         self.scale = 1
         self.src_img = img
         self.fruit_bodies = []
+        self.sperated_area = []
         self.ruler_contour = None
         self.ruler_box = []
 
@@ -58,8 +59,80 @@ class Measure:
         # 在图像上绘制矩形
         cv2.drawContours(self.src_img, [box], 0, (0, 255, 0), 2)
         cv2.putText(self.src_img, f'Width: {rule_width}', (box[2][0], box[2][1]), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
-
+        self.scale = rule_width
         return self.src_img
+
+    def build_roi(self, image):
+        roi_list = []
+        combine_image = np.zeros(image.shape, dtype='uint8')
+        for fruit_body in self.fruit_bodies:
+            contour, cX, cY = fruit_body
+            # 计算最小外接矩形
+            x, y, w, h = cv2.boundingRect(contour)
+
+            # 裁剪ROI
+            roi = image[y:y + h, x:x + w]
+            # 清除contour外的图像
+            mask = np.zeros(roi.shape[:2], dtype='uint8')
+            # 绘制轮廓到掩码上，轮廓内部填充白色
+            # 轮廓偏移到[x, y]
+            offset_contour = contour + np.array([[-x, -y]])
+
+            # 确保偏移后的轮廓点仍然在ROI内
+            offset_contour = offset_contour.clip(0, [w - 1, h - 1])
+            cv2.drawContours(mask, [offset_contour], -1, (255), thickness=cv2.FILLED)
+            # 使用掩码来清除contour外的图像部分，保留contour内的灰度图像
+            roi = cv2.bitwise_and(roi, roi, mask=mask)
+            roi_list.append([roi, x, y])
+            #cv2.imwrite(f'./output/roi/{cX}_{cY}.jpg', roi)
+
+            # ...
+            # 将分割结果放回原图对应位置
+            # 将分割结果放回原图对应位置
+            combine_image[y:y + h, x:x + w] = roi
+        #cv2.imwrite(f'./output/roi/COMBINE.jpg', combine_image)
+        edge_image = self.find_edges(combine_image)
+        cv2.imshow('Image with split contours', edge_image)
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
+        for index in range(len(roi_list)):
+            roi, x, y = roi_list[index]
+            edge_roi = edge_image[y:y + roi.shape[0], x:x + roi.shape[1]]
+            # cv2.imshow('Image with split contours', edge_roi)
+            # cv2.waitKey(0)
+            # cv2.destroyAllWindows()
+            cap_area, stipe_area = self.sperate_cap_by_circle(edge_roi, roi)
+            combine_cap_area = self.axis_offset(cap_area, x, y)
+            combine_stipe_area = self.axis_offset(stipe_area, x, y)
+            self.sperated_area.append([combine_cap_area, combine_stipe_area])
+
+    def axis_offset(self, positions, offset_x, offset_y):
+        for i in range(len(positions)):
+            positions[i][0] += offset_x  # x坐标加上offsetX
+            positions[i][1] += offset_y  # y坐标加上offsetY
+        return positions
+
+    def find_edges(self, combie_image):
+        img = cv2.cvtColor(combie_image, cv2.COLOR_BGR2GRAY)
+        # 均值滤波
+        img = cv2.GaussianBlur(img, (9, 9), 0)
+        # Morph
+        kernal = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+        img = cv2.morphologyEx(img, cv2.MORPH_CLOSE, kernal)
+        # 高斯滤波
+        img = cv2.medianBlur(img, 23)
+        # Morph
+        kernal = cv2.getStructuringElement(cv2.MORPH_RECT, (7, 7))
+        img = cv2.morphologyEx(img, cv2.MORPH_OPEN, kernal)
+        # Morph
+        kernal = cv2.getStructuringElement(cv2.MORPH_RECT, (1, 1))
+        img = cv2.morphologyEx(img, cv2.MORPH_CLOSE, kernal)
+        # edge
+        edges = cv2.Canny(img, 10, 200)
+
+        return edges
+
+
 
     def sperate_cap_by_curvature(self):
         img = cv2.cvtColor(self.src_img, cv2.COLOR_BGR2GRAY)
@@ -151,6 +224,108 @@ class Measure:
         cv2.waitKey(0)
         cv2.destroyAllWindows()
 
+    def sperate_cap_by_circle(self, edge, roi):
+        contours, _ = cv2.findContours(edge, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        circles = [cv2.minEnclosingCircle(contour) for contour in contours]
+        # 选择最大的轮廓
+        outer_contour = max(contours, key=cv2.contourArea)
+        # 计算子实体质心
+        M = cv2.moments(outer_contour)
+        cX, cY = int(M["m10"] / M["m00"]), int(M["m01"] / M["m00"])
+
+        # 直径最接近roi宽度的外接圆
+        max_radius = 1
+        cap_circle_idx = 0
+        for index in range(len(circles)):
+            radius = circles[index][1]
+            if radius > max_radius and radius < roi.shape[1]:
+                max_radius = radius
+                cap_circle_idx = index
+        cap_circle = circles[cap_circle_idx] # [center , radius]
+        cap_contour = contours[cap_circle_idx]
+
+        cv2.drawContours(roi, [cap_contour], -1, (0, 255, 0), 5)
+
+        # 显示结果
+        cv2.imshow('Image with Rectangles', roi)
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
+
+        # 计算外接圆与轮廓的交点
+        circle_center, circle_radius = cap_circle
+        contour_points = cap_contour.reshape(-1, 2)
+        intersections = []
+        for point in contour_points:
+            distance = ((point[0] - circle_center[0]) ** 2 + (point[1] - circle_center[1]) ** 2) ** 0.5
+            if np.isclose(distance, circle_radius):
+                intersections.append(point)
+
+        # 计算交点与质心之间的距离，找出最远的一个交点
+        farthest_intersection = None
+        max_distance = 0
+        for intersection in intersections:
+            distance = ((intersection[0] - cX) ** 2 + (
+                        intersection[1] - cY) ** 2) ** 0.5
+            if distance > max_distance:
+                max_distance = distance
+                farthest_intersection = intersection
+
+        cv2.putText(roi, 'o', (farthest_intersection[0], farthest_intersection[1]), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
+                    (255, 0, 0), 1)
+        circle_center = np.array(circle_center).round().astype(int)
+
+        cv2.putText(roi, 'o', (int(circle_center[0]), int(circle_center[1])), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
+                   (255, 0, 0), 1)
+
+        cv2.line(roi, circle_center, farthest_intersection, (0, 0, 255))
+        cv2.imshow('Image with Rectangles', roi)
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
+
+        # 计算直线方程的系数
+        slope = (farthest_intersection[1] - circle_center[1]) / (farthest_intersection[0] - circle_center[0])
+        intercept = farthest_intersection[1] - slope * farthest_intersection[0]
+
+        # 根据直线方程判断边缘点位于直线的哪一侧
+        def point_side_of_line(point, slope, intercept):
+            if slope == float('inf'): # 垂直线
+                return 1 if point[0] > circle_center[0] else -1
+            else:
+                return 1 if slope * point[0] - point[1] + intercept > 0 else -1
+
+                # 将边缘点分为两组
+
+        points_left = []
+        points_right = []
+        for y in range(edge.shape[0]):
+            for x in range(edge.shape[1]):
+                if edge[y, x] == 255:  # 检查是否是边缘点
+                    side = point_side_of_line((x, y), slope, intercept)
+                    if side == 1:
+                        points_left.append((x, y))
+                    elif side == -1:
+                        points_right.append((x, y))
+
+                        # 对每一组边缘点计算最小外接矩形
+
+        # 计算凸包
+        hull_left = cv2.convexHull(np.array(points_left))
+        hull_right = cv2.convexHull(np.array(points_right))
+
+        # 计算凸包的边界矩形（可能是旋转的）
+        bbox_left = cv2.boxPoints(cv2.minAreaRect(hull_left)).round().astype(int)
+        bbox_right = cv2.boxPoints(cv2.minAreaRect(hull_right)).round().astype(int)
+        cv2.drawContours(roi, [bbox_left], -1, (255, 0, 0), thickness=2)
+        cv2.drawContours(roi, [bbox_right], -1, (0, 0, 255), thickness=2)
+
+            # 显示结果
+        cv2.imshow('Image with Rectangles', roi)
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
+
+        return bbox_left, bbox_right
+
+
     def getCurvature(self, contour, gap=1):
         # 计算轮廓上的点的曲率
         curvatures = []
@@ -234,7 +409,7 @@ class Measure:
 
         return self.getCurvature(interpolated_contour, gap)
 
-def mark_curvatures(self, contour, curvatures):
+    def mark_curvatures(self, contour, curvatures):
         """
         在轮廓上标记曲率值。
 

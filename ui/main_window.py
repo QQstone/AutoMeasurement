@@ -9,6 +9,7 @@
 import os
 
 import cv2
+import numpy as np
 from PyQt5 import QtCore, QtGui, QtWidgets
 from PyQt5.QtCore import QDir
 from PyQt5.QtGui import QImage, QPixmap
@@ -220,22 +221,42 @@ class Ui_MainWindow(object):
             self.loadDetectFlow()
 
     def measurement(self):
+        result = ''
         # 找到目标 排除形心最下者为标尺
         #targets = cv2.findContours(self.cur_img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         img = self.cur_img.copy()
         measure = Measure(img)
+        measure.find_targets()
+        # 比例尺
+        scale = 140.0 / measure.scale
+        # 子实体轮廓
+        fruit_bodies = measure.fruit_bodies
+        measure.build_roi(self.src_img.copy())
+        sperated_area = measure.sperated_area
 
-        # 计算比例尺
-        # 建立索引 在形心位置标记序号
-        # measured_img = measure.find_targets()
-        # self.graphicsShow(measured_img)
-        # 分别裁剪roi 迭代
-            #
-            # 多边形拟合（是否必要）逐点计算轮廓点曲率
-            # 以曲率最大截断菌盖菌柄
-        measure.sperate_cap_by_curvature()
-            # 菌盖外接矩形获取菌盖直径和厚度
-            # 计算菌柄
+        for i in range(len(fruit_bodies)):
+            contour, cX, cY = fruit_bodies[i]
+            cv2.putText(self.src_img, str(i + 1), (cX, cY), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 1)
+            cap_area, stipe_area = sperated_area[i]
+            cv2.drawContours(self.src_img, [cap_area], -1, (0, 255, 0), 2)  # 第一部分用绿色绘制
+            cv2.drawContours(self.src_img, [stipe_area], -1, (0, 0, 255), 2)  # 第二部分用红色绘制
+
+            cap_thick = np.sqrt((cap_area[0][0] - cap_area[1][0]) ** 2 +
+                            (cap_area[0][1] - cap_area[1][1]) ** 2)
+            cap_diameter = np.sqrt((cap_area[1][0] - cap_area[2][0]) ** 2 +
+                             (cap_area[1][1] - cap_area[2][1]) ** 2)
+
+            stipe_height = np.sqrt((stipe_area[1][0] - stipe_area[2][0]) ** 2 +
+                             (stipe_area[1][1] - stipe_area[2][1]) ** 2)
+
+            result += '第%d个：菌盖直径：%.2f mm，菌盖厚度：%.2f mm，菌柄高度：%.2f mm\n' % (
+                i + 1,
+                cap_diameter * scale,
+                cap_thick * scale,
+                stipe_height * scale
+            )
+        self.graphicsShow(self.src_img)
+        self.plainTextEdit.setPlainText(result)
         return 0
 
     def imread(self, imgPath):
@@ -246,10 +267,17 @@ class Ui_MainWindow(object):
     def graphicsShow(self, img):
         y, x = img.shape[:-1]
         ratio = float(y / x)
-        fit_width = self.graphicsView.height()
-        fit_height = int(fit_width * ratio)
-        img = cv2.resize(img, (fit_width, fit_height), interpolation=cv2.INTER_AREA)
-        frame = QImage(img, fit_width, fit_height, fit_width*3, QImage.Format_RGB888)
+        frame = None
+        if ratio > 1:
+            fit_height = self.graphicsView.height()
+            fit_width = int(fit_height / ratio)
+            img = cv2.resize(img, (fit_width, fit_height), interpolation=cv2.INTER_AREA)
+            frame = QImage(img, fit_width, fit_height, fit_width * 3, QImage.Format_RGB888)
+        else:
+            fit_width = self.graphicsView.height()
+            fit_height = int(fit_width * ratio)
+            img = cv2.resize(img, (fit_width, fit_height), interpolation=cv2.INTER_AREA)
+            frame = QImage(img, fit_width, fit_height, fit_width*3, QImage.Format_RGB888)
         self.scene.clear()
         self.pix = QPixmap.fromImage(frame)
         self.scene.addPixmap(self.pix)
