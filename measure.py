@@ -60,6 +60,7 @@ class Measure:
         # 在图像上绘制矩形
         cv2.drawContours(self.src_img, [box], 0, (0, 255, 0), 2)
         cv2.putText(self.src_img, f'Width: {rule_width}', (box[2][0], box[2][1]), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+
         self.scale = rule_width
         return self.src_img
 
@@ -248,7 +249,7 @@ class Measure:
         cv2.drawContours(roi, [cap_contour], -1, (0, 255, 0), 5)
 
         # 显示结果
-        cv2.imshow('Image with Rectangles', roi)
+        cv2.imshow('Cap Contour', roi)
         cv2.waitKey(0)
         cv2.destroyAllWindows()
 
@@ -273,17 +274,17 @@ class Measure:
                 farthest_intersection = intersection
         if farthest_intersection is None:
             farthest_intersection = intersections[-1]
-        cv2.putText(roi, 'o', (farthest_intersection[0], farthest_intersection[1]), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
-                    (255, 0, 0), 1)
+        # cv2.putText(roi, 'o', (farthest_intersection[0], farthest_intersection[1]), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
+        #             (255, 0, 0), 1)
         circle_center = np.array(circle_center).round().astype(int)
 
-        cv2.putText(roi, 'o', (int(circle_center[0]), int(circle_center[1])), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
-                   (255, 0, 0), 1)
+        # cv2.putText(roi, 'o', (int(circle_center[0]), int(circle_center[1])), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
+        #            (255, 0, 0), 1)
 
         cv2.line(roi, circle_center, farthest_intersection, (0, 0, 255))
-        cv2.imshow('Image with Rectangles', roi)
-        cv2.waitKey(0)
-        cv2.destroyAllWindows()
+        # cv2.imshow('Image with Rectangles', roi)
+        # cv2.waitKey(0)
+        # cv2.destroyAllWindows()
 
         # 计算直线方程的系数
         slope = (farthest_intersection[1] - circle_center[1]) / (farthest_intersection[0] - circle_center[0])
@@ -321,7 +322,7 @@ class Measure:
         cv2.drawContours(roi, [bbox_left], -1, (255, 0, 0), thickness=2)
         cv2.drawContours(roi, [bbox_right], -1, (0, 0, 255), thickness=2)
 
-            # 显示结果
+        # 显示结果
         cv2.imshow('Image with Rectangles', roi)
         cv2.waitKey(0)
         cv2.destroyAllWindows()

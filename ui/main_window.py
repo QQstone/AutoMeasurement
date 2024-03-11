@@ -132,7 +132,7 @@ class Ui_MainWindow(object):
 
     def retranslateUi(self, MainWindow):
         _translate = QtCore.QCoreApplication.translate
-        MainWindow.setWindowTitle(_translate("MainWindow", "鹿茸菇生长自动测量"))
+        MainWindow.setWindowTitle(_translate("MainWindow", "鹿茸菇表型测量软件"))
         self.groupMeasure.setTitle(_translate("MainWindow", "测量结果"))
         self.btn_import.setText(_translate("MainWindow", "导入图像"))
         self.btn_reset.setText(_translate("MainWindow", "重置图像"))
@@ -140,7 +140,7 @@ class Ui_MainWindow(object):
         self.btn_measurement.setText(_translate("MainWindow", "测量"))
 
     def importImg(self):
-        fname = QFileDialog.getOpenFileName(self, 'import Image', './', 'Image files (*.jpg *.gif *.png *.jpeg)')
+        fname = QFileDialog.getOpenFileName(self, '选择图像', './', 'Image files (*.jpg *.gif *.png *.jpeg)')
 
         if fname[0]:
             self.src_img = self.imread(fname[0])
@@ -161,18 +161,6 @@ class Ui_MainWindow(object):
         if self.src_img is None:
             return
         self.update_image()
-
-
-    def editmode(self):
-        self.modeEditor = Ui_ModeEditor(self)
-        self.modeEditor.setWindowTitle("编辑模式")
-        retVal = self.modeEditor.exec()
-        if retVal == QDialog.Accepted:
-            # write into config.ini
-            self.saveDetectFlow()
-        else:
-            # reload from config.ini
-            self.loadDetectFlow()
 
     def create_new_config_file(self):
         # 选择目录
