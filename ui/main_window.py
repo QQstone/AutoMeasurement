@@ -17,7 +17,6 @@ from PyQt5.QtWidgets import QGraphicsScene, QFileDialog, QDialog, QMessageBox
 import configparser
 
 from measure import Measure
-from ui.mode_editor import Ui_ModeEditor
 from ui.step import Step
 
 
@@ -87,34 +86,18 @@ class Ui_MainWindow(object):
         self.btn_reset.clicked.connect(self.reset_img)
         self.formLayout.setWidget(0, QtWidgets.QFormLayout.FieldRole, self.btn_reset)
 
-        self.btn_usemode = QtWidgets.QToolButton(self.processWidget)
-        self.btn_usemode.setObjectName("btn_usemode")
-        self.btn_usemode.clicked.connect(self.usemode)
-        self.btn_usemode.setEnabled(False)
-
-        self.formLayout.setWidget(3, QtWidgets.QFormLayout.LabelRole, self.btn_usemode)
-        self.btn_editmode = QtWidgets.QToolButton(self.processWidget)
-        self.btn_editmode.setObjectName("btn_editmode")
-        self.btn_editmode.clicked.connect(self.editmode)
-
         self.txt_filePathLabel = QtWidgets.QLabel(self.processWidget)
         self.txt_filePathLabel.setObjectName("txt_filePathLabel")
         self.txt_filePathLabel.setText("配置文件：")
-        self.formLayout.setWidget(1, QtWidgets.QFormLayout.LabelRole, self.txt_filePathLabel)
+        self.formLayout.setWidget(2, QtWidgets.QFormLayout.LabelRole, self.txt_filePathLabel)
         self.txt_filePath = QtWidgets.QLabel(self.processWidget)
         self.txt_filePath.setObjectName("txt_filePath")
-        self.formLayout.setWidget(1, QtWidgets.QFormLayout.FieldRole, self.txt_filePath)
+        self.formLayout.setWidget(2, QtWidgets.QFormLayout.FieldRole, self.txt_filePath)
 
-        self.formLayout.setWidget(3, QtWidgets.QFormLayout.FieldRole, self.btn_editmode)
-        self.btn_createFile = QtWidgets.QToolButton(self.processWidget)
-        self.btn_createFile.setObjectName("btn_preprocess")
-        self.btn_createFile.clicked.connect(self.create_new_config_file)
-        self.btn_createFile.setEnabled(False)
 
-        self.formLayout.setWidget(2, QtWidgets.QFormLayout.LabelRole, self.btn_createFile)
         self.btn_loadfile = QtWidgets.QToolButton(self.processWidget)
         self.btn_loadfile.setObjectName("btn_processconfig")
-        self.formLayout.setWidget(2, QtWidgets.QFormLayout.FieldRole, self.btn_loadfile)
+        self.formLayout.setWidget(1, QtWidgets.QFormLayout.LabelRole, self.btn_loadfile)
         self.btn_loadfile.clicked.connect(self.load_config_file)
         self.btn_loadfile.setEnabled(False)
 
@@ -127,7 +110,7 @@ class Ui_MainWindow(object):
         self.btn_measurement.setSizePolicy(sizePolicy)
         self.btn_measurement.setMinimumSize(QtCore.QSize(69, 0))
         self.btn_measurement.setObjectName("btn_measurement")
-        self.formLayout.setWidget(4, QtWidgets.QFormLayout.SpanningRole, self.btn_measurement)
+        self.formLayout.setWidget(3, QtWidgets.QFormLayout.SpanningRole, self.btn_measurement)
         self.btn_measurement.clicked.connect(self.measurement)
         self.btn_measurement.setEnabled(False)
 
@@ -153,11 +136,6 @@ class Ui_MainWindow(object):
         self.groupMeasure.setTitle(_translate("MainWindow", "测量结果"))
         self.btn_import.setText(_translate("MainWindow", "导入图像"))
         self.btn_reset.setText(_translate("MainWindow", "重置图像"))
-        # self.btn_background.setText(_translate("MainWindow", "背景环境"))
-        # self.btn_grabcut.setText(_translate("MainWindow", "提取前景"))
-        self.btn_usemode.setText(_translate("MainWindow", "应用模式"))
-        self.btn_editmode.setText(_translate("MainWindow", "编辑模式"))
-        self.btn_createFile.setText(_translate("MainWindow", "新建配置"))
         self.btn_loadfile.setText(_translate("MainWindow", "加载配置"))
         self.btn_measurement.setText(_translate("MainWindow", "测量"))
 
@@ -168,10 +146,7 @@ class Ui_MainWindow(object):
             self.src_img = self.imread(fname[0])
             self.graphicsShow(self.src_img)
             self.btn_import.setEnabled(False)
-            # self.btn_background.setEnabled(True)
-            self.btn_createFile.setEnabled(True)
             self.btn_loadfile.setEnabled(True)
-            self.btn_usemode.setEnabled(True)
             self.btn_measurement.setEnabled(True)
 
     def reset_img(self):
@@ -179,8 +154,6 @@ class Ui_MainWindow(object):
         self.cur_img = None
         self.scene.clear()
         self.btn_import.setEnabled(True)
-        self.btn_createFile.setEnabled(False)
-        self.btn_usemode.setEnabled(False)
         self.btn_measurement.setEnabled(False)
         self.btn_loadfile.setEnabled(False)
 
@@ -221,6 +194,7 @@ class Ui_MainWindow(object):
             self.loadDetectFlow()
 
     def measurement(self):
+        self.usemode()
         result = ''
         # 找到目标 排除形心最下者为标尺
         #targets = cv2.findContours(self.cur_img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
