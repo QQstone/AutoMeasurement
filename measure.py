@@ -1,3 +1,4 @@
+import math
 import queue
 
 import cv2
@@ -266,10 +267,12 @@ class Measure:
         for intersection in intersections:
             distance = ((intersection[0] - cX) ** 2 + (
                         intersection[1] - cY) ** 2) ** 0.5
-            if distance > max_distance:
+            cos = self.calculate_cos_of_angle(intersection[0], intersection[1], cX, cY, circle_center[0], circle_center[1])
+            if cos<0.6 and distance > max_distance:
                 max_distance = distance
                 farthest_intersection = intersection
-
+        if farthest_intersection is None:
+            farthest_intersection = intersections[-1]
         cv2.putText(roi, 'o', (farthest_intersection[0], farthest_intersection[1]), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
                     (255, 0, 0), 1)
         circle_center = np.array(circle_center).round().astype(int)
@@ -325,6 +328,22 @@ class Measure:
 
         return bbox_left, bbox_right
 
+    def calculate_cos_of_angle(self, x, y, cx, cy, centerx, centery):
+        # 计算向量A和B
+        vector_A = (cx - x, cy - y)
+        vector_B = (centerx - x, centery - y)
+
+        # 计算点积
+        dot_product = vector_A[0] * vector_B[0] + vector_A[1] * vector_B[1]
+
+        # 计算向量A和B的模长
+        magnitude_A = math.sqrt(vector_A[0] ** 2 + vector_A[1] ** 2)
+        magnitude_B = math.sqrt(vector_B[0] ** 2 + vector_B[1] ** 2)
+
+        # 计算夹角的余弦值
+        cos_theta = dot_product / (magnitude_A * magnitude_B)
+
+        return cos_theta
 
     def getCurvature(self, contour, gap=1):
         # 计算轮廓上的点的曲率
