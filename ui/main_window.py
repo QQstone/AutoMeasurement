@@ -246,8 +246,15 @@ class Ui_MainWindow(object):
             cap_diameter = np.sqrt((cap_area[1][0] - cap_area[2][0]) ** 2 +
                              (cap_area[1][1] - cap_area[2][1]) ** 2)
 
-            stipe_height = np.sqrt((stipe_area[1][0] - stipe_area[2][0]) ** 2 +
-                             (stipe_area[1][1] - stipe_area[2][1]) ** 2)
+            if cap_thick>cap_diameter:
+                cap_thick, cap_diameter = cap_diameter, cap_thick
+
+            stipe_height = np.sqrt((stipe_area[0][0] - stipe_area[1][0]) ** 2 +
+                             (stipe_area[0][1] - stipe_area[1][1]) ** 2)
+            stipe_width = np.sqrt((stipe_area[1][0] - stipe_area[2][0]) ** 2 +
+                                  (stipe_area[1][1] - stipe_area[2][1]) ** 2)
+            if stipe_width>stipe_height:
+                stipe_height, stipe_width = stipe_width, stipe_height
 
             result += '第%d个：菌盖直径：%.2f mm，菌盖厚度：%.2f mm，菌柄高度：%.2f mm\n' % (
                 i + 1,
