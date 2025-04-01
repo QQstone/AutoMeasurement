@@ -20,6 +20,11 @@ class TableWidget(QTableWidget):
     def signal_connect(self):
         for spinbox in self.findChildren(QSpinBox):
             spinbox.valueChanged.connect(self.update_item)
+            # Connect slider if it exists
+            slider = self.findChild(QSlider, name=f"{spinbox.objectName()}_slider")
+            if slider:
+                spinbox.valueChanged.connect(lambda v, s=slider: s.setValue(v))
+                slider.valueChanged.connect(lambda v, sb=spinbox: sb.setValue(v))
         for doublespinbox in self.findChildren(QDoubleSpinBox):
             doublespinbox.valueChanged.connect(self.update_item)
         for combox in self.findChildren(QComboBox):
@@ -45,6 +50,10 @@ class TableWidget(QTableWidget):
             box = self.findChild(QWidget, name=key)
             if isinstance(box, QSpinBox) or isinstance(box, QDoubleSpinBox):
                 box.setValue(int(param[key]))
+                # Update slider if it exists
+                slider = self.findChild(QSlider, name=f"{key}_slider")
+                if slider:
+                    slider.setValue(int(param[key]))
             elif isinstance(box, QComboBox):
                 box.setCurrentIndex(int(param[key]))
             elif isinstance(box, QCheckBox):
@@ -61,6 +70,36 @@ class TableWidget(QTableWidget):
         for combox in self.findChildren(QCheckBox):
             param[combox.objectName()] = combox.isChecked()
         return param
+
+    def add_spinbox_with_slider(self, name, min_val, max_val, step, row, col, label):
+        # Create container widget
+        container = QWidget()
+        layout = QHBoxLayout(container)
+        layout.setContentsMargins(0, 0, 0, 0)
+        
+        # Create spinbox
+        spinbox = QSpinBox()
+        spinbox.setObjectName(name)
+        spinbox.setMinimum(min_val)
+        spinbox.setMaximum(max_val)
+        spinbox.setSingleStep(step)
+        
+        # Create slider
+        slider = QSlider(Qt.Horizontal)
+        slider.setObjectName(f"{name}_slider")
+        slider.setMinimum(min_val)
+        slider.setMaximum(max_val)
+        slider.setSingleStep(step)
+        
+        # Add widgets to layout
+        layout.addWidget(spinbox)
+        layout.addWidget(slider)
+        
+        # Set cell widget
+        self.setItem(row, col, QTableWidgetItem(label))
+        self.setCellWidget(row, col + 1, container)
+        
+        return spinbox, slider
 
 
 class GrayingTableWidget(TableWidget):
@@ -110,6 +149,7 @@ class MorphTabledWidget(TableWidget):
 
         self.setColumnCount(2)
         self.setRowCount(3)
+
         self.setItem(0, 0, QTableWidgetItem('类型'))
         self.setCellWidget(0, 1, self.op_comBox)
         self.setItem(1, 0, QTableWidgetItem('核大小'))
@@ -132,17 +172,8 @@ class GradTabledWidget(TableWidget):
         self.ksize_spinBox.setSingleStep(2)
         self.ksize_spinBox.setObjectName('ksize')
 
-        self.dx_spinBox = QSpinBox()
-        self.dx_spinBox.setMaximum(1)
-        self.dx_spinBox.setMinimum(0)
-        self.dx_spinBox.setSingleStep(1)
-        self.dx_spinBox.setObjectName('dx')
-
-        self.dy_spinBox = QSpinBox()
-        self.dy_spinBox.setMaximum(1)
-        self.dy_spinBox.setMinimum(0)
-        self.dy_spinBox.setSingleStep(1)
-        self.dy_spinBox.setObjectName('dy')
+        self.dx_spinBox, self.dx_slider = self.add_spinbox_with_slider('dx', 0, 1, 1, 2, 0, 'x方向')
+        self.dy_spinBox, self.dy_slider = self.add_spinbox_with_slider('dy', 0, 1, 1, 3, 0, 'y方向')
 
         self.setColumnCount(2)
         self.setRowCount(4)
@@ -151,11 +182,6 @@ class GradTabledWidget(TableWidget):
         self.setCellWidget(0, 1, self.kind_comBox)
         self.setItem(1, 0, QTableWidgetItem('核大小'))
         self.setCellWidget(1, 1, self.ksize_spinBox)
-        self.setItem(2, 0, QTableWidgetItem('x方向'))
-        self.setCellWidget(2, 1, self.dx_spinBox)
-        self.setItem(3, 0, QTableWidgetItem('y方向'))
-        self.setCellWidget(3, 1, self.dy_spinBox)
-
         self.signal_connect()
 
 
@@ -163,17 +189,7 @@ class ThresholdTableWidget(TableWidget):
     def __init__(self, parent=None):
         super(ThresholdTableWidget, self).__init__(parent=parent)
 
-        self.thresh_spinBox = QSpinBox()
-        self.thresh_spinBox.setObjectName('thresh')
-        self.thresh_spinBox.setMaximum(255)
-        self.thresh_spinBox.setMinimum(0)
-        self.thresh_spinBox.setSingleStep(1)
-
-        self.maxval_spinBox = QSpinBox()
-        self.maxval_spinBox.setObjectName('maxval')
-        self.maxval_spinBox.setMaximum(255)
-        self.maxval_spinBox.setMinimum(0)
-        self.maxval_spinBox.setSingleStep(1)
+        
 
         self.method_comBox = QComboBox()
         self.method_comBox.addItems(['二进制阈值化', '反二进制阈值化', '截断阈值化', '阈值化为0', '反阈值化为0', '大津算法'])
@@ -184,11 +200,8 @@ class ThresholdTableWidget(TableWidget):
 
         self.setItem(0, 0, QTableWidgetItem('类型'))
         self.setCellWidget(0, 1, self.method_comBox)
-        self.setItem(1, 0, QTableWidgetItem('阈值'))
-        self.setCellWidget(1, 1, self.thresh_spinBox)
-        self.setItem(2, 0, QTableWidgetItem('最大值'))
-        self.setCellWidget(2, 1, self.maxval_spinBox)
-
+        self.thresh_spinBox, self.thresh_slider = self.add_spinbox_with_slider('thresh', 0, 255, 1, 1, 0, '阈值')
+        self.maxval_spinBox, self.maxval_slider = self.add_spinbox_with_slider('maxval', 0, 255, 1, 2, 0, '最大值')
         self.signal_connect()
 
 
@@ -196,25 +209,11 @@ class EdgeTableWidget(TableWidget):
     def __init__(self, parent=None):
         super(EdgeTableWidget, self).__init__(parent=parent)
 
-        self.thresh1_spinBox = QSpinBox()
-        self.thresh1_spinBox.setMinimum(0)
-        self.thresh1_spinBox.setMaximum(255)
-        self.thresh1_spinBox.setSingleStep(1)
-        self.thresh1_spinBox.setObjectName('thresh1')
-
-        self.thresh2_spinBox = QSpinBox()
-        self.thresh2_spinBox.setMinimum(0)
-        self.thresh2_spinBox.setMaximum(255)
-        self.thresh2_spinBox.setSingleStep(1)
-        self.thresh2_spinBox.setObjectName('thresh2')
 
         self.setColumnCount(2)
         self.setRowCount(2)
-
-        self.setItem(0, 0, QTableWidgetItem('阈值1'))
-        self.setCellWidget(0, 1, self.thresh1_spinBox)
-        self.setItem(1, 0, QTableWidgetItem('阈值2'))
-        self.setCellWidget(1, 1, self.thresh2_spinBox)
+        self.thresh1_spinBox, self.thresh1_slider = self.add_spinbox_with_slider('thresh1', 0, 255, 1, 0, 0, '阈值1')
+        self.thresh2_spinBox, self.thresh2_slider = self.add_spinbox_with_slider('thresh2', 0, 255, 1, 1, 0, '阈值2')
         self.signal_connect()
 
 
@@ -275,30 +274,12 @@ class HoughLineTableWidget(TableWidget):
     def __init__(self, parent=None):
         super(HoughLineTableWidget, self).__init__(parent=parent)
 
-        self.thresh_spinBox = QSpinBox()
-        self.thresh_spinBox.setMinimum(0)
-        self.thresh_spinBox.setSingleStep(1)
-        self.thresh_spinBox.setObjectName('thresh')
-
-        self.min_length_spinBox = QSpinBox()
-        self.min_length_spinBox.setMinimum(0)
-        self.min_length_spinBox.setSingleStep(1)
-        self.min_length_spinBox.setObjectName('min_length')
-
-        self.max_gap_spinbox = QSpinBox()
-        self.max_gap_spinbox.setMinimum(0)
-        self.max_gap_spinbox.setSingleStep(1)
-        self.max_gap_spinbox.setObjectName('max_gap')
 
         self.setColumnCount(2)
         self.setRowCount(3)
-
-        self.setItem(0, 0, QTableWidgetItem('交点阈值'))
-        self.setCellWidget(0, 1, self.thresh_spinBox)
-        self.setItem(1, 0, QTableWidgetItem('最小长度'))
-        self.setCellWidget(1, 1, self.min_length_spinBox)
-        self.setItem(2, 0, QTableWidgetItem('最大间距'))
-        self.setCellWidget(2, 1, self.max_gap_spinbox)
+        self.thresh_spinBox, self.thresh_slider = self.add_spinbox_with_slider('thresh', 0, 255, 1, 0, 0, '交点阈值')
+        self.min_length_spinBox, self.min_length_slider = self.add_spinbox_with_slider('min_length', 0, 255, 1, 1, 0, '最小长度')
+        self.max_gap_spinbox, self.max_gap_slider = self.add_spinbox_with_slider('max_gap', 0, 255, 1, 2, 0, '最大间距')
         self.signal_connect()
 
 
@@ -312,18 +293,13 @@ class LightTableWidget(TableWidget):
         self.alpha_spinBox.setSingleStep(0.1)
         self.alpha_spinBox.setObjectName('alpha')
 
-        self.beta_spinbox = QSpinBox()
-        self.beta_spinbox.setMinimum(0)
-        self.beta_spinbox.setSingleStep(1)
-        self.beta_spinbox.setObjectName('beta')
 
         self.setColumnCount(2)
         self.setRowCount(2)
 
         self.setItem(0, 0, QTableWidgetItem('alpha'))
         self.setCellWidget(0, 1, self.alpha_spinBox)
-        self.setItem(1, 0, QTableWidgetItem('beta'))
-        self.setCellWidget(1, 1, self.beta_spinbox)
+        self.beta_spinbox, self.beta_slider = self.add_spinbox_with_slider('beta', 0, 255, 1, 1, 0, 'beta')
         self.signal_connect()
 
 

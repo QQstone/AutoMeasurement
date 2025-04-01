@@ -7,7 +7,7 @@ from scipy.interpolate import make_interp_spline
 
 
 class Measure:
-    def __init__(self, img):
+    def __init__(self, img, debug=False):
         # 比例尺
         self.scale = 1
         self.src_img = img
@@ -15,6 +15,7 @@ class Measure:
         self.sperated_area = []
         self.ruler_contour = None
         self.ruler_box = []
+        self.debug = debug
 
     def find_targets(self):
         # 查找轮廓
@@ -93,9 +94,10 @@ class Measure:
             combine_image[y:y + h, x:x + w] = roi
         #cv2.imwrite(f'./output/roi/COMBINE.jpg', combine_image)
         edge_image = self.find_edges(combine_image)
-        cv2.imshow('Image with split contours', edge_image)
-        cv2.waitKey(0)
-        cv2.destroyAllWindows()
+        if self.debug:
+            cv2.imshow('Image with split contours', edge_image)
+            cv2.waitKey(0)
+            cv2.destroyAllWindows()
         for index in range(len(roi_list)):
             roi, x, y = roi_list[index]
             edge_roi = edge_image[y:y + roi.shape[0], x:x + roi.shape[1]]
@@ -170,9 +172,10 @@ class Measure:
             cv2.putText(self.src_img, str(index), (point[0][0], point[0][1]), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
 
         cv2.drawContours(self.src_img, [smoothed_contour], -1, (0, 255, 0), 2)  # 第一部分用绿色绘制
-        cv2.imshow('Image with split contours', self.src_img)
-        cv2.waitKey(0)
-        cv2.destroyAllWindows()
+        if self.debug:
+            cv2.imshow('Image with split contours', self.src_img)
+            cv2.waitKey(0)
+            cv2.destroyAllWindows()
 
         curvatures = self.getCurvature(simpled_contour)
         #curvatures = self.get_float_curvatures(smoothed_contour, 4)
@@ -209,9 +212,10 @@ class Measure:
                     (255, 0, 0), 1)
         cv2.putText(img, 'o', (contour[index_list[1]][0][0], contour[index_list[1]][0][1]), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
                     (255, 0, 0), 1)
-        cv2.imshow('Image with split contours', img)
-        cv2.waitKey(0)
-        cv2.destroyAllWindows()
+        if self.debug:
+            cv2.imshow('Image with split contours', img)
+            cv2.waitKey(0)
+            cv2.destroyAllWindows()
 
         index_list.sort()
         part1 = np.concatenate((contour[index_list[1]:], contour[:index_list[0]], contour[index_list[1]:index_list[1]]), axis=0)
@@ -248,9 +252,10 @@ class Measure:
         cv2.drawContours(roi, [cap_contour], -1, (0, 255, 0), 5)
 
         # 显示结果
-        cv2.imshow('Image with Rectangles', roi)
-        cv2.waitKey(0)
-        cv2.destroyAllWindows()
+        if self.debug:
+            cv2.imshow('Image with Rectangles', roi)
+            cv2.waitKey(0)
+            cv2.destroyAllWindows()
 
         # 计算外接圆与轮廓的交点
         circle_center, circle_radius = cap_circle
@@ -322,9 +327,10 @@ class Measure:
         cv2.drawContours(roi, [bbox_right], -1, (0, 0, 255), thickness=2)
 
             # 显示结果
-        cv2.imshow('Image with Rectangles', roi)
-        cv2.waitKey(0)
-        cv2.destroyAllWindows()
+        if self.debug:
+            cv2.imshow('Image with Rectangles', roi)
+            cv2.waitKey(0)
+            cv2.destroyAllWindows()
 
         return bbox_left, bbox_right
 
@@ -445,6 +451,7 @@ class Measure:
                 text = "{:.2f}".format(curvatures[index]*100)
                 cv2.putText(self.src_img, text, (contour[index][0][0], contour[index][0][1]), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
                         (255, 0, 0), 1)
-        cv2.imshow('Image with split contours', self.src_img)
-        cv2.waitKey(0)
-        cv2.destroyAllWindows()
+        if self.debug:
+            cv2.imshow('Image with split contours', self.src_img)
+            cv2.waitKey(0)
+            cv2.destroyAllWindows()
