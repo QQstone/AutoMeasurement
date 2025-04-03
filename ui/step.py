@@ -42,6 +42,14 @@ class Step:
         elif funcName == 'Gamma':
             self._arguments = {'gamma': 1}
             self._widget = GammaItem()
+        elif funcName == 'FrequencyFilter':
+            self._arguments = {
+                'filter_type': 0,
+                'radius': 30,
+                'width': 10,
+                'order': 2
+            }
+            self._widget = FrequencyFilterItem()
 
     def update_params(self, params: dict):
         for key in params.keys():

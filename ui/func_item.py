@@ -214,6 +214,135 @@ class GammaItem(MyItem):
         return cv2.LUT(img, gamma_table)
 
 
+class FrequencyFilterItem(MyItem):
+    def __init__(self, parent=None):
+        super().__init__('频域滤波', parent=parent)
+        self._filter_type = 0  # 0: 低通, 1: 高通, 2: 带通
+        self._radius = 30      # 截止频率/半径
+        self._width = 10       # 带通滤波的带宽
+        self._order = 2        # Butterworth滤波器阶数
+    
+    def create_butterworth_filter(self, shape, radius, order, highpass=False):
+        rows, cols = shape
+        center_row, center_col = rows // 2, cols // 2
+        
+        # 使用numpy的meshgrid替代ogrid，提高网格计算效率
+        x = np.arange(cols) - center_col
+        y = np.arange(rows) - center_row
+        X, Y = np.meshgrid(x, y)
+        d = np.sqrt(X*X + Y*Y)
+        
+        # Butterworth滤波器
+        if highpass:
+            h = 1 / (1 + (radius / (d + 1e-6)) ** (2*order))
+        else:
+            h = 1 / (1 + (d / radius) ** (2*order))
+            
+        return h
+    
+    def create_band_filter(self, shape, center_radius, width, order):
+        rows, cols = shape
+        center_row, center_col = rows // 2, cols // 2
+        
+        # 使用numpy的meshgrid
+        x = np.arange(cols) - center_col
+        y = np.arange(rows) - center_row
+        X, Y = np.meshgrid(x, y)
+        d = np.sqrt(X*X + Y*Y)
+        
+        # 带通滤波器 = 低通 - 高通
+        h_low = 1 / (1 + (d / (center_radius + width/2)) ** (2*order))
+        h_high = 1 / (1 + ((center_radius - width/2) / (d + 1e-6)) ** (2*order))
+        
+        return h_low - h_high
+    
+    def apply_frequency_filter(self, img, h):
+        # 转换为浮点数
+        img_float = img.astype(np.float32)
+        
+        # 对每个通道进行FFT和滤波
+        channels = []
+        for channel in cv2.split(img_float):
+            # 使用numpy的FFT，比cv2.dft更快
+            # 添加填充以减少频谱泄漏
+            padded = np.pad(channel, ((0, 0), (0, 0)), mode='reflect')
+            
+            # 快速傅里叶变换
+            f = np.fft.fft2(padded)
+            fshift = np.fft.fftshift(f)
+            
+            # 应用滤波器
+            filtered = fshift * h
+            
+            # 逆变换
+            f_ishift = np.fft.ifftshift(filtered)
+            img_back = np.real(np.fft.ifft2(f_ishift))
+            
+            # 去除填充
+            img_back = img_back[:channel.shape[0], :channel.shape[1]]
+            
+            # 归一化到0-255范围
+            img_back = np.clip(img_back, 0, 255).astype(np.uint8)
+            channels.append(img_back)
+        
+        return cv2.merge(channels)
+    
+    def optimize_fft_size(self, size):
+        """计算最优的FFT大小"""
+        return 2 ** np.ceil(np.log2(size)).astype(int)
+    
+    def __call__(self, img):
+        # 获取最优FFT尺寸
+        rows, cols = img.shape[:2]
+        optimal_rows = self.optimize_fft_size(rows)
+        optimal_cols = self.optimize_fft_size(cols)
+        
+        # 使用反射填充而不是零填充，减少边缘效应
+        padded = cv2.copyMakeBorder(img, 
+                                   0, optimal_rows - rows, 
+                                   0, optimal_cols - cols,
+                                   cv2.BORDER_REFLECT)
+        
+        # 创建滤波器
+        if self._filter_type == 0:  # 低通
+            h = self.create_butterworth_filter(padded.shape[:2], 
+                                            self._radius, 
+                                            self._order, 
+                                            False)
+        elif self._filter_type == 1:  # 高通
+            h = self.create_butterworth_filter(padded.shape[:2], 
+                                            self._radius, 
+                                            self._order, 
+                                            True)
+        else:  # 带通
+            h = self.create_band_filter(padded.shape[:2], 
+                                      self._radius, 
+                                      self._width, 
+                                      self._order)
+        
+        # 应用滤波器
+        filtered = self.apply_frequency_filter(padded, h)
+        
+        # 裁剪回原始尺寸
+        filtered = filtered[:rows, :cols]
+        
+        return filtered
+
+    def visualize_spectrum(self, img):
+        """可视化频谱（用于调试）"""
+        img_float = img.astype(np.float32)
+        channels = []
+        
+        for channel in cv2.split(img_float):
+            f = np.fft.fft2(channel)
+            fshift = np.fft.fftshift(f)
+            magnitude_spectrum = 20 * np.log(np.abs(fshift) + 1)
+            magnitude_spectrum = np.clip(magnitude_spectrum, 0, 255).astype(np.uint8)
+            channels.append(magnitude_spectrum)
+            
+        return cv2.merge(channels)
+
+
 func_items = [
     GrayingItem,
     FilterItem,
@@ -225,5 +354,6 @@ func_items = [
     ContourItem,
     HoughLineItem,
     LightItem,
-    GammaItem
+    GammaItem,
+    FrequencyFilterItem
 ]

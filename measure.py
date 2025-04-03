@@ -230,109 +230,117 @@ class Measure:
         cv2.destroyAllWindows()
 
     def sperate_cap_by_circle(self, edge, roi):
+        # 找到轮廓
         contours, _ = cv2.findContours(edge, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        circles = [cv2.minEnclosingCircle(contour) for contour in contours]
         # 选择最大的轮廓
         outer_contour = max(contours, key=cv2.contourArea)
-        # 计算子实体质心
-        M = cv2.moments(outer_contour)
-        cX, cY = int(M["m10"] / M["m00"]), int(M["m01"] / M["m00"])
-
-        # 直径最接近roi宽度的外接圆
-        max_radius = 1
-        cap_circle_idx = 0
-        for index in range(len(circles)):
-            radius = circles[index][1]
-            if radius > max_radius and radius < roi.shape[1]:
-                max_radius = radius
-                cap_circle_idx = index
-        cap_circle = circles[cap_circle_idx] # [center , radius]
-        cap_contour = contours[cap_circle_idx]
-
-        cv2.drawContours(roi, [cap_contour], -1, (0, 255, 0), 5)
-
-        # 显示结果
-        if self.debug:
-            cv2.imshow('Image with Rectangles', roi)
-            cv2.waitKey(0)
-            cv2.destroyAllWindows()
-
-        # 计算外接圆与轮廓的交点
-        circle_center, circle_radius = cap_circle
-        contour_points = cap_contour.reshape(-1, 2)
-        intersections = []
-        for point in contour_points:
-            distance = ((point[0] - circle_center[0]) ** 2 + (point[1] - circle_center[1]) ** 2) ** 0.5
-            if np.isclose(distance, circle_radius):
-                intersections.append(point)
-
-        # 计算交点与质心之间的距离，找出最远的一个交点
-        farthest_intersection = None
-        max_distance = 0
-        for intersection in intersections:
-            distance = ((intersection[0] - cX) ** 2 + (
-                        intersection[1] - cY) ** 2) ** 0.5
-            cos = self.calculate_cos_of_angle(intersection[0], intersection[1], cX, cY, circle_center[0], circle_center[1])
-            if cos<0.6 and distance > max_distance:
-                max_distance = distance
-                farthest_intersection = intersection
-        if farthest_intersection is None:
-            farthest_intersection = intersections[-1]
-        cv2.putText(roi, 'o', (farthest_intersection[0], farthest_intersection[1]), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
-                    (255, 0, 0), 1)
-        circle_center = np.array(circle_center).round().astype(int)
-
-        cv2.putText(roi, 'o', (int(circle_center[0]), int(circle_center[1])), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
-                   (255, 0, 0), 1)
-
-        cv2.line(roi, circle_center, farthest_intersection, (0, 0, 255))
-        cv2.imshow('Image with Rectangles', roi)
-        cv2.waitKey(0)
-        cv2.destroyAllWindows()
-
-        # 计算直线方程的系数
-        slope = (farthest_intersection[1] - circle_center[1]) / (farthest_intersection[0] - circle_center[0])
-        intercept = farthest_intersection[1] - slope * farthest_intersection[0]
-
-        # 根据直线方程判断边缘点位于直线的哪一侧
-        def point_side_of_line(point, slope, intercept):
-            if slope == float('inf'): # 垂直线
-                return 1 if point[0] > circle_center[0] else -1
+        
+        # 计算凸包和凸包缺陷
+        hull = cv2.convexHull(outer_contour, returnPoints=False)
+        defects = cv2.convexityDefects(outer_contour, hull)
+        
+        # 找到最佳分割点（最深的凸包缺陷点）
+        split_point = None
+        max_depth = 0
+        if defects is not None:
+            for i in range(defects.shape[0]):
+                s, e, f, d = defects[i, 0]
+                if d > max_depth:
+                    max_depth = d
+                    split_point = tuple(outer_contour[f][0])
+        
+        # 如果没有找到合适的凸包缺陷，使用轮廓的中点
+        if split_point is None:
+            y_coords = outer_contour[:, :, 1]
+            mid_y = (np.min(y_coords) + np.max(y_coords)) // 2
+            points_at_mid = outer_contour[outer_contour[:, :, 1] == mid_y]
+            if len(points_at_mid) > 0:
+                split_point = tuple(points_at_mid[0][0])
             else:
-                return 1 if slope * point[0] - point[1] + intercept > 0 else -1
-
-                # 将边缘点分为两组
-
+                # 如果在中间高度没有点，取最近的点
+                closest_idx = np.argmin(np.abs(y_coords - mid_y))
+                split_point = tuple(outer_contour[closest_idx][0])
+        
+        # 在图像上标记分割点
+        cv2.putText(roi, 'o', split_point, cv2.FONT_HERSHEY_SIMPLEX, 0.5,
+                    (255, 0, 0), 1)
+        
+        # 计算轮廓的质心（用于确定分割方向）
+        M = cv2.moments(outer_contour)
+        if M["m00"] != 0:
+            cX = int(M["m10"] / M["m00"])
+            cY = int(M["m01"] / M["m00"])
+        else:
+            cX, cY = split_point
+        
+        # 计算垂直于主方向的分割线
+        # 使用主方向作为分割线的方向
+        vx, vy, x0, y0 = cv2.fitLine(outer_contour, cv2.DIST_L2, 0, 0.01, 0.01)
+        # 计算垂直方向
+        perpendicular_slope = -vx/vy if vy != 0 else float('inf')
+        
+        # 通过分割点的垂直线
+        if perpendicular_slope == float('inf'):
+            # 垂直线的情况
+            def point_side_of_line(point):
+                return 1 if point[0] > split_point[0] else -1
+        else:
+            # 计算过分割点的垂直线方程: y - y1 = m(x - x1)
+            intercept = split_point[1] - perpendicular_slope * split_point[0]
+            def point_side_of_line(point):
+                return 1 if point[1] > perpendicular_slope * point[0] + intercept else -1
+        
+        # 将边缘点分为两组
         points_left = []
         points_right = []
         for y in range(edge.shape[0]):
             for x in range(edge.shape[1]):
                 if edge[y, x] == 255:  # 检查是否是边缘点
-                    side = point_side_of_line((x, y), slope, intercept)
+                    side = point_side_of_line((x, y))
                     if side == 1:
                         points_left.append((x, y))
-                    elif side == -1:
+                    else:
                         points_right.append((x, y))
-
-                        # 对每一组边缘点计算最小外接矩形
-
-        # 计算凸包
-        hull_left = cv2.convexHull(np.array(points_left))
-        hull_right = cv2.convexHull(np.array(points_right))
-
-        # 计算凸包的边界矩形（可能是旋转的）
-        bbox_left = cv2.boxPoints(cv2.minAreaRect(hull_left)).round().astype(int)
-        bbox_right = cv2.boxPoints(cv2.minAreaRect(hull_right)).round().astype(int)
-        cv2.drawContours(roi, [bbox_left], -1, (255, 0, 0), thickness=2)
-        cv2.drawContours(roi, [bbox_right], -1, (0, 0, 255), thickness=2)
-
-            # 显示结果
-        if self.debug:
-            cv2.imshow('Image with Rectangles', roi)
-            cv2.waitKey(0)
-            cv2.destroyAllWindows()
-
-        return bbox_left, bbox_right
+        
+        # 如果任一组为空，调整分割线
+        if len(points_left) == 0 or len(points_right) == 0:
+            points_left = []
+            points_right = []
+            # 使用水平分割线作为备选
+            for y in range(edge.shape[0]):
+                for x in range(edge.shape[1]):
+                    if edge[y, x] == 255:
+                        if y < split_point[1]:
+                            points_left.append((x, y))
+                        else:
+                            points_right.append((x, y))
+        
+        # 确保两组都有点
+        if len(points_left) > 0 and len(points_right) > 0:
+            # 计算凸包
+            hull_left = cv2.convexHull(np.array(points_left))
+            hull_right = cv2.convexHull(np.array(points_right))
+            
+            # 计算最小外接矩形
+            bbox_left = cv2.boxPoints(cv2.minAreaRect(hull_left)).round().astype(int)
+            bbox_right = cv2.boxPoints(cv2.minAreaRect(hull_right)).round().astype(int)
+            
+            # 在图像上绘制结果
+            cv2.drawContours(roi, [bbox_left], -1, (255, 0, 0), thickness=2)
+            cv2.drawContours(roi, [bbox_right], -1, (0, 0, 255), thickness=2)
+            
+            # 显示结果（如果debug模式开启）
+            if self.debug:
+                cv2.imshow('Image with Rectangles', roi)
+                cv2.waitKey(0)
+                cv2.destroyAllWindows()
+            
+            return bbox_left, bbox_right
+        else:
+            # 如果分割失败，返回整个轮廓的边界框作为两个部分
+            bbox = cv2.boxPoints(cv2.minAreaRect(outer_contour)).round().astype(int)
+            mid_idx = len(bbox) // 2
+            return bbox[:mid_idx], bbox[mid_idx:]
 
     def calculate_cos_of_angle(self, x, y, cx, cy, centerx, centery):
         # 计算向量A和B

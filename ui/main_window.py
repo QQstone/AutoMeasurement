@@ -225,7 +225,7 @@ class Ui_MainWindow(object):
         # 找到目标 排除形心最下者为标尺
         #targets = cv2.findContours(self.cur_img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         img = self.cur_img.copy()
-        measure = Measure(img)
+        measure = Measure(img, debug=True)
         measure.find_targets()
         # 比例尺
         scale = 140.0 / measure.scale
