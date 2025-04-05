@@ -338,6 +338,9 @@ class Ui_MainWindow(object):
     def appendDetectFlowItem(self, item):
         self.__detectFlow.append(item)
 
+    def insertDetectFlowItem(self, index, item):
+        self.__detectFlow.insert(index, item)
+
     def removeDetectFlowItem(self, index: int):
         del self.__detectFlow[index]
 

@@ -29,8 +29,18 @@ class FuncListWidget(QListWidget):
             func_name = getattr(type(func_item), '__name__').replace('Item', '')
             step = Step(func_name)
 
-            self.parentDialog.mainWindow.appendDetectFlowItem(step)
-            self.parentDialog.stepListWidget.addItem(use_item)
+            # 获取当前选中的step索引
+            current_index = self.parentDialog.stepListWidget.getCurrentIndex()
+            
+            # 如果current_index == -1，则追加到末尾
+            if current_index == -1:
+                self.parentDialog.mainWindow.appendDetectFlowItem(step)
+                self.parentDialog.stepListWidget.addItem(use_item)
+            else:
+                # 在当前选中的step之后插入
+                self.parentDialog.mainWindow.insertDetectFlowItem(current_index + 1, step)
+                self.parentDialog.stepListWidget.insertItem(current_index + 1, use_item)
+                
             self.parentDialog.mainWindow.update_image()
 
     def enterEvent(self, event):

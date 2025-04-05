@@ -319,6 +319,33 @@ class GammaITabelWidget(TableWidget):
         self.signal_connect()
 
 
+class FrequencyFilterTabledWidget(TableWidget):
+    def __init__(self, parent=None):
+        super(FrequencyFilterTabledWidget, self).__init__(parent=parent)
+        
+        # 滤波器类型选择
+        self.filter_type_comBox = QComboBox()
+        self.filter_type_comBox.addItems(['低通滤波', '高通滤波', '带通滤波'])
+        self.filter_type_comBox.setObjectName('filter_type')
+
+        self.setColumnCount(2)
+        self.setRowCount(4)
+
+        self.setItem(0, 0, QTableWidgetItem('滤波器类型'))
+        self.setCellWidget(0, 1, self.filter_type_comBox)
+        
+        # 截止频率/半径
+        self.radius_spinBox, self.radius_slider = self.add_spinbox_with_slider('radius', 1, 100, 1, 1, 0, '截止频率')
+        
+        # 带通滤波的带宽
+        self.width_spinBox, self.width_slider = self.add_spinbox_with_slider('width', 1, 50, 1, 2, 0, '带宽')
+        
+        # Butterworth滤波器阶数
+        self.order_spinBox, self.order_slider = self.add_spinbox_with_slider('order', 1, 10, 1, 3, 0, '滤波器阶数')
+        
+        self.signal_connect()
+
+
 tables = [
     GrayingTableWidget,
     FilterTabledWidget,
@@ -330,7 +357,8 @@ tables = [
     ContourTableWidget,
     HoughLineTableWidget,
     LightTableWidget,
-    GammaITabelWidget
+    GammaITabelWidget,
+    FrequencyFilterTabledWidget
 ]
 
 

@@ -26,7 +26,7 @@ class Ui_ModeEditor(QDialog):
         self.loadSteps()
 
     def setupUi(self):
-        self.resize(804, 397)
+        self.resize(1000, 400)
         self.verticalLayout = QtWidgets.QVBoxLayout(self)
         self.verticalLayout.setObjectName("verticalLayout")
         # funcs list
