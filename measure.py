@@ -313,7 +313,13 @@ class Measure:
         
         # 在图像上标记分割点
         cv2.putText(roi, 'o', split_point, cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 1)
-        
+        # 如果debug模式开启，显示骨架
+        if self.debug:
+            debug_img = roi.copy()
+            debug_img[skeleton > 0] = [255, 255, 255]  # 用白色显示骨架
+            cv2.imshow('Skeleton', debug_img)
+            cv2.waitKey(0)
+            cv2.destroyAllWindows()
         # 计算垂直方向
         perpendicular_slope = -vx/vy if vy != 0 else float('inf')
         
@@ -362,11 +368,11 @@ class Measure:
             cv2.drawContours(roi, [bbox_left], -1, (255, 0, 0), thickness=2)
             cv2.drawContours(roi, [bbox_right], -1, (0, 0, 255), thickness=2)
             
-            # 如果debug模式开启，显示骨架
+            # 如果debug模式开启，显示边界框
             if self.debug:
                 debug_img = roi.copy()
-                debug_img[skeleton > 0] = [0, 255, 0]  # 用绿色显示骨架
-                cv2.imshow('Skeleton', debug_img)
+
+                cv2.imshow('sperate result', debug_img)
                 cv2.waitKey(0)
                 cv2.destroyAllWindows()
             
