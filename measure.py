@@ -116,23 +116,21 @@ class Measure:
         return positions
 
     def find_edges(self, combie_image):
+        # 转换为灰度图
         img = cv2.cvtColor(combie_image, cv2.COLOR_BGR2GRAY)
-        # 均值滤波
-        img = cv2.GaussianBlur(img, (9, 9), 0)
-        # Morph
-        kernal = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
-        img = cv2.morphologyEx(img, cv2.MORPH_CLOSE, kernal)
-        # 高斯滤波
-        img = cv2.medianBlur(img, 23)
-        # Morph
-        kernal = cv2.getStructuringElement(cv2.MORPH_RECT, (7, 7))
-        img = cv2.morphologyEx(img, cv2.MORPH_OPEN, kernal)
-        # Morph
-        kernal = cv2.getStructuringElement(cv2.MORPH_RECT, (1, 1))
-        img = cv2.morphologyEx(img, cv2.MORPH_CLOSE, kernal)
-        # edge
-        edges = cv2.Canny(img, 10, 200)
-
+        
+        # 二值化处理，由于combie_image中非目标区域为黑色(0)，所以只需要简单的阈值处理
+        _, binary = cv2.threshold(img, 1, 255, cv2.THRESH_BINARY)
+        
+        # 找到外轮廓
+        contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        
+        # 创建边缘图像
+        edges = np.zeros_like(img)
+        
+        # 绘制所有外轮廓
+        cv2.drawContours(edges, contours, -1, 255, 1)
+        
         return edges
 
 
@@ -235,47 +233,87 @@ class Measure:
         # 选择最大的轮廓
         outer_contour = max(contours, key=cv2.contourArea)
         
-        # 计算凸包和凸包缺陷
-        hull = cv2.convexHull(outer_contour, returnPoints=False)
-        defects = cv2.convexityDefects(outer_contour, hull)
+        # 计算轮廓的边界框
+        x, y, w, h = cv2.boundingRect(outer_contour)
         
-        # 找到最佳分割点（最深的凸包缺陷点）
-        split_point = None
-        max_depth = 0
-        if defects is not None:
-            for i in range(defects.shape[0]):
-                s, e, f, d = defects[i, 0]
-                if d > max_depth:
-                    max_depth = d
-                    split_point = tuple(outer_contour[f][0])
+        # 创建掩码图像
+        mask = np.zeros(edge.shape, dtype=np.uint8)
+        cv2.drawContours(mask, [outer_contour], -1, 255, -1)
         
-        # 如果没有找到合适的凸包缺陷，使用轮廓的中点
-        if split_point is None:
-            y_coords = outer_contour[:, :, 1]
-            mid_y = (np.min(y_coords) + np.max(y_coords)) // 2
-            points_at_mid = outer_contour[outer_contour[:, :, 1] == mid_y]
-            if len(points_at_mid) > 0:
-                split_point = tuple(points_at_mid[0][0])
+        # 使用形态学操作提取骨架
+        skeleton = np.zeros_like(mask)
+        element = cv2.getStructuringElement(cv2.MORPH_CROSS, (3, 3))
+        done = False
+        
+        while not done:
+            eroded = cv2.erode(mask, element)
+            temp = cv2.dilate(eroded, element)
+            temp = cv2.subtract(mask, temp)
+            skeleton = cv2.bitwise_or(skeleton, temp)
+            mask = eroded.copy()
+            
+            if cv2.countNonZero(mask) == 0:
+                done = True
+        
+        # 找到骨架的端点
+        kernel = np.uint8([[1, 1, 1],
+                          [1, 10, 1],
+                          [1, 1, 1]])
+        filtered = cv2.filter2D(skeleton, -1, kernel)
+        endpoints = np.where(filtered == 11)
+        endpoints = list(zip(endpoints[1], endpoints[0]))  # 转换为(x,y)格式
+        
+        if len(endpoints) >= 2:
+            # 找到最远的两个端点
+            max_dist = 0
+            start_point = None
+            end_point = None
+            for i in range(len(endpoints)):
+                for j in range(i + 1, len(endpoints)):
+                    dist = np.sqrt((endpoints[i][0] - endpoints[j][0])**2 + 
+                                 (endpoints[i][1] - endpoints[j][1])**2)
+                    if dist > max_dist:
+                        max_dist = dist
+                        start_point = endpoints[i]
+                        end_point = endpoints[j]
+            
+            # 计算主方向
+            vx = end_point[0] - start_point[0]
+            vy = end_point[1] - start_point[1]
+            length = np.sqrt(vx*vx + vy*vy)
+            if length > 0:
+                vx /= length
+                vy /= length
+        else:
+            # 如果找不到足够的端点，使用原来的方法
+            vx, vy, x0, y0 = cv2.fitLine(outer_contour, cv2.DIST_L2, 0, 0.01, 0.01)
+        
+        # 将轮廓点转换为更易于处理的格式
+        contour_points = outer_contour.reshape(-1, 2)
+        
+        # 计算轮廓上每个点到主方向线的距离
+        distances = []
+        for point in contour_points:
+            # 点到直线的距离公式：|ax + by + c|/sqrt(a^2 + b^2)
+            # 其中直线方程为：vy*x - vx*y + (vx*y0 - vy*x0) = 0
+            if 'x0' in locals() and 'y0' in locals():
+                a, b, c = vy, -vx, vx*y0 - vy*x0
             else:
-                # 如果在中间高度没有点，取最近的点
-                closest_idx = np.argmin(np.abs(y_coords - mid_y))
-                split_point = tuple(outer_contour[closest_idx][0])
+                # 使用起点和终点计算直线方程
+                a = vy
+                b = -vx
+                c = vx*start_point[1] - vy*start_point[0]
+            
+            dist = abs(a*point[0] + b*point[1] + c) / math.sqrt(a*a + b*b)
+            distances.append(dist)
+        
+        # 找到距离最大的点，这通常是菌盖和菌柄的分界点
+        max_dist_idx = np.argmax(distances)
+        split_point = tuple(contour_points[max_dist_idx])
         
         # 在图像上标记分割点
-        cv2.putText(roi, 'o', split_point, cv2.FONT_HERSHEY_SIMPLEX, 0.5,
-                    (255, 0, 0), 1)
+        cv2.putText(roi, 'o', split_point, cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 1)
         
-        # 计算轮廓的质心（用于确定分割方向）
-        M = cv2.moments(outer_contour)
-        if M["m00"] != 0:
-            cX = int(M["m10"] / M["m00"])
-            cY = int(M["m01"] / M["m00"])
-        else:
-            cX, cY = split_point
-        
-        # 计算垂直于主方向的分割线
-        # 使用主方向作为分割线的方向
-        vx, vy, x0, y0 = cv2.fitLine(outer_contour, cv2.DIST_L2, 0, 0.01, 0.01)
         # 计算垂直方向
         perpendicular_slope = -vx/vy if vy != 0 else float('inf')
         
@@ -290,30 +328,25 @@ class Measure:
             def point_side_of_line(point):
                 return 1 if point[1] > perpendicular_slope * point[0] + intercept else -1
         
-        # 将边缘点分为两组
+        # 将轮廓点分为两组
         points_left = []
         points_right = []
-        for y in range(edge.shape[0]):
-            for x in range(edge.shape[1]):
-                if edge[y, x] == 255:  # 检查是否是边缘点
-                    side = point_side_of_line((x, y))
-                    if side == 1:
-                        points_left.append((x, y))
-                    else:
-                        points_right.append((x, y))
+        for point in contour_points:
+            side = point_side_of_line(point)
+            if side == 1:
+                points_left.append(point)
+            else:
+                points_right.append(point)
         
-        # 如果任一组为空，调整分割线
+        # 如果任一组为空，使用水平分割线作为备选
         if len(points_left) == 0 or len(points_right) == 0:
             points_left = []
             points_right = []
-            # 使用水平分割线作为备选
-            for y in range(edge.shape[0]):
-                for x in range(edge.shape[1]):
-                    if edge[y, x] == 255:
-                        if y < split_point[1]:
-                            points_left.append((x, y))
-                        else:
-                            points_right.append((x, y))
+            for point in contour_points:
+                if point[1] < split_point[1]:
+                    points_left.append(point)
+                else:
+                    points_right.append(point)
         
         # 确保两组都有点
         if len(points_left) > 0 and len(points_right) > 0:
@@ -329,9 +362,11 @@ class Measure:
             cv2.drawContours(roi, [bbox_left], -1, (255, 0, 0), thickness=2)
             cv2.drawContours(roi, [bbox_right], -1, (0, 0, 255), thickness=2)
             
-            # 显示结果（如果debug模式开启）
+            # 如果debug模式开启，显示骨架
             if self.debug:
-                cv2.imshow('Image with Rectangles', roi)
+                debug_img = roi.copy()
+                debug_img[skeleton > 0] = [0, 255, 0]  # 用绿色显示骨架
+                cv2.imshow('Skeleton', debug_img)
                 cv2.waitKey(0)
                 cv2.destroyAllWindows()
             
